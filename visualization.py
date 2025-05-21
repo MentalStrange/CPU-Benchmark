@@ -1,89 +1,104 @@
 import matplotlib.pyplot as plt
-# import numpy as np
 import csv
 
-# Read data
-thread_counts = []
-times = []
-speedups = []
-efficiencies = []
-f_amdahls = []
+def read_speedup_data(filename):
+    threads = []
+    speedups = []
+    with open(filename, 'r') as csvfile:
+        reader = csv.reader(csvfile)
+        next(reader)  # Skip header
+        for row in reader:
+            threads.append(int(row[1]))      # Thread count
+            speedups.append(float(row[3]))   # Speedup
+    return threads, speedups
 
-with open('quicksort_performance.csv', 'r') as csvfile:
-    reader = csv.reader(csvfile)
-    next(reader)  # Skip header row
-    for row in reader:
-        thread_counts.append(int(row[1]))  # Thread count
-        times.append(float(row[2]))        # Time (ms)
-        speedups.append(float(row[3]))     # Speedup
-        efficiencies.append(float(row[4])) # Efficiency (%)
-        f_amdahls.append(float(row[5]))    # F Amdahl
+def read_metric_data(filename, col_index):
+    threads = []
+    values = []
+    with open(filename, 'r') as csvfile:
+        reader = csv.reader(csvfile)
+        next(reader)  # Skip header
+        for row in reader:
+            threads.append(int(row[1]))      # Thread count
+            values.append(float(row[col_index]))
+    return threads, values
 
-# Create separate plots for each metric
+# Read data from each file
+threads_light, speedup_light = read_speedup_data('quicksort_performance_light.csv')
+threads_medium, speedup_medium = read_speedup_data('quicksort_performance_medium.csv')
+threads_hard, speedup_hard = read_speedup_data('quicksort_performance_hard.csv')
 
-# 1. Time vs Threads
-plt.figure(figsize=(10, 6))
-plt.plot(thread_counts, times, color='blue', marker='o', linestyle='-', linewidth=2, markersize=8)
-plt.xlabel('Number of Threads')
-plt.ylabel('Execution Time (ms)')
-plt.title('QuickSort Execution Time with Increasing Threads')
-plt.xticks(thread_counts)
+# Plot all three speedup curves on one plot
+plt.figure(figsize=(12, 7))
+plt.plot(threads_light, speedup_light, marker='o', label='light load (3x3)', color='#174A6F')
+plt.plot(threads_medium, speedup_medium, marker='o', label='medium load (4x4)', color='#F95D6A')
+plt.plot(threads_hard, speedup_hard, marker='o', label='heavy load (4x4)', color='#B30059')
+
+plt.title('Final measurements\nSpeedup', fontsize=32, weight='bold', pad=30)
+plt.xlabel('Number of Threads', fontsize=16)
+plt.ylabel('Speedup', fontsize=16)
+plt.legend(fontsize=14, loc='best')
 plt.grid(True)
-plt.savefig('quicksort_time.png')
+plt.xticks(threads_light)
+plt.tight_layout()
+plt.savefig('final_speedup_comparison.png')
+plt.show()
+
+print("Visualization image has been saved as: final_speedup_comparison.png")
+
+# --- TIME ---
+threads_light, time_light = read_metric_data('quicksort_performance_light.csv', 2)
+threads_medium, time_medium = read_metric_data('quicksort_performance_medium.csv', 2)
+threads_hard, time_hard = read_metric_data('quicksort_performance_hard.csv', 2)
+
+plt.figure(figsize=(12, 7))
+plt.plot(threads_light, time_light, marker='o', label='light load (3x3)', color='#174A6F')
+plt.plot(threads_medium, time_medium, marker='o', label='medium load (4x4)', color='#F95D6A')
+plt.plot(threads_hard, time_hard, marker='o', label='heavy load (4x4)', color='#B30059')
+plt.title('Execution Time vs Number of Threads', fontsize=20, weight='bold')
+plt.xlabel('Number of Threads', fontsize=16)
+plt.ylabel('Execution Time (ms)', fontsize=16)
+plt.legend(fontsize=14, loc='best')
+plt.grid(True)
+plt.xticks(threads_light)
+plt.tight_layout()
+plt.savefig('final_time_comparison.png')
 plt.close()
 
-# 2. Speedup vs Threads
-plt.figure(figsize=(10, 6))
-plt.plot(thread_counts, speedups, color='red', marker='o', linestyle='-', linewidth=2, markersize=8)
-plt.xlabel('Number of Threads')
-plt.ylabel('Speedup')
-plt.title('QuickSort Speedup with Increasing Threads')
-plt.xticks(thread_counts)
+# --- EFFICIENCY ---
+threads_light, eff_light = read_metric_data('quicksort_performance_light.csv', 4)
+threads_medium, eff_medium = read_metric_data('quicksort_performance_medium.csv', 4)
+threads_hard, eff_hard = read_metric_data('quicksort_performance_hard.csv', 4)
+
+plt.figure(figsize=(12, 7))
+plt.plot(threads_light, eff_light, marker='o', label='light load (3x3)', color='#174A6F')
+plt.plot(threads_medium, eff_medium, marker='o', label='medium load (4x4)', color='#F95D6A')
+plt.plot(threads_hard, eff_hard, marker='o', label='heavy load (4x4)', color='#B30059')
+plt.title('Efficiency vs Number of Threads', fontsize=20, weight='bold')
+plt.xlabel('Number of Threads', fontsize=16)
+plt.ylabel('Efficiency (%)', fontsize=16)
+plt.legend(fontsize=14, loc='best')
 plt.grid(True)
-plt.savefig('quicksort_speedup.png')
+plt.xticks(threads_light)
+plt.tight_layout()
+plt.savefig('final_efficiency_comparison.png')
 plt.close()
 
-# 3. Efficiency vs Threads
-plt.figure(figsize=(10, 6))
-plt.plot(thread_counts, efficiencies, color='green', marker='o', linestyle='-', linewidth=2, markersize=8)
-plt.xlabel('Number of Threads')
-plt.ylabel('Efficiency (%)')
-plt.title('QuickSort Efficiency with Increasing Threads')
-plt.xticks(thread_counts)
+# --- F AMDAHL ---
+threads_light, amdahl_light = read_metric_data('quicksort_performance_light.csv', 5)
+threads_medium, amdahl_medium = read_metric_data('quicksort_performance_medium.csv', 5)
+threads_hard, amdahl_hard = read_metric_data('quicksort_performance_hard.csv', 5)
+
+plt.figure(figsize=(12, 7))
+plt.plot(threads_light, amdahl_light, marker='o', label='light load (3x3)', color='#174A6F')
+plt.plot(threads_medium, amdahl_medium, marker='o', label='medium load (4x4)', color='#F95D6A')
+plt.plot(threads_hard, amdahl_hard, marker='o', label='heavy load (4x4)', color='#B30059')
+plt.title('Amdahl\'s Law Factor vs Number of Threads', fontsize=20, weight='bold')
+plt.xlabel('Number of Threads', fontsize=16)
+plt.ylabel('F Amdahl', fontsize=16)
+plt.legend(fontsize=14, loc='best')
 plt.grid(True)
-plt.savefig('quicksort_efficiency.png')
+plt.xticks(threads_light)
+plt.tight_layout()
+plt.savefig('final_amdahl_comparison.png')
 plt.close()
-
-# 4. F Amdahl vs Threads
-plt.figure(figsize=(10, 6))
-plt.plot(thread_counts, f_amdahls, color='purple', marker='o', linestyle='-', linewidth=2, markersize=8)
-plt.xlabel('Number of Threads')
-plt.ylabel('F Amdahl')
-plt.title('QuickSort Amdahl\'s Law Factor with Increasing Threads')
-plt.xticks(thread_counts)
-plt.grid(True)
-plt.savefig('quicksort_amdahl.png')
-plt.close()
-
-# 5. Combined plot (all metrics)
-plt.figure(figsize=(12, 8))
-plt.plot(thread_counts, [t/max(times) for t in times], color='blue', marker='o', linestyle='-', linewidth=2, markersize=8, label='Normalized Time')
-plt.plot(thread_counts, speedups, color='red', marker='s', linestyle='-', linewidth=2, markersize=8, label='Speedup')
-plt.plot(thread_counts, [e/100 for e in efficiencies], color='green', marker='^', linestyle='-', linewidth=2, markersize=8, label='Efficiency')
-plt.plot(thread_counts, f_amdahls, color='purple', marker='d', linestyle='-', linewidth=2, markersize=8, label='F Amdahl')
-plt.xlabel('Number of Threads')
-plt.ylabel('Metric Value')
-plt.title('QuickSort Performance Metrics with Increasing Threads')
-plt.xticks(thread_counts)
-plt.grid(True)
-plt.legend()
-plt.savefig('quicksort_combined.png')
-plt.show()  # Show only the last combined plot
-
-print("All visualization images have been saved:"
-      "\n- quicksort_time.png"
-      "\n- quicksort_speedup.png"
-      "\n- quicksort_efficiency.png"
-      "\n- quicksort_amdahl.png"
-      "\n- quicksort_combined.png")
-# This code reads the quicksort_performance.csv file and creates separate visualizations for each metric.

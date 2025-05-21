@@ -31,7 +31,7 @@ double calculate_efficiency(double speedup, int thread_count){
 }
 
 // Function to save sorting performance metrics to CSV file
-void save_performance_data(int array_size, int thread_count, double time_ms, double speedup)
+void save_performance_data(int array_size, int thread_count, double time_ms, double speedup, const string& filename = "quicksort_performance.csv")
 {
     // file pointer
     fstream fout;
@@ -42,14 +42,14 @@ void save_performance_data(int array_size, int thread_count, double time_ms, dou
 
     // Check if file exists to write headers if it's a new file
     bool file_exists = false;
-    ifstream file_check("quicksort_performance.csv");
+    ifstream file_check(filename);
     if (file_check.good()) {
         file_exists = true;
     }
     file_check.close();
 
     // opens an existing csv file or creates a new file.
-    fout.open("quicksort_performance.csv", ios::out | ios::app);
+    fout.open(filename, ios::out | ios::app);
     
     // Write headers if it's a new file
     if (!file_exists) {
@@ -66,5 +66,5 @@ void save_performance_data(int array_size, int thread_count, double time_ms, dou
     
     fout.close();
     
-    cout << "Performance data saved to quicksort_performance.csv" << endl;
+    cout << "Performance data saved to " << filename << endl;
 }
