@@ -6,12 +6,17 @@
 #include <chrono>
 #include <fstream>
 #include "save_data_in_csv.h"
+#include <future>
+#include <atomic>
 
 using namespace std;
 
 // This will be set by user input
 int MAX_THREADS = thread::hardware_concurrency();
 int THREAD_THRESHOLD = 1000;
+
+// Global atomic counter for running tasks
+std::atomic<int> running_tasks(0);
 
 // Store baseline time for accurate speedup calculations
 double get_baseline_time() {
@@ -122,6 +127,44 @@ vector<int> generate_random_array(int size) {
     return data;
 }
 
+void quicksort_parallel(vector<int>& arr, int begin, int end, int max_threads) {
+    if (begin >= end) return;
+
+    int pivot = arr[begin + (end - begin) / 2];
+    int left = begin, right = end;
+
+    while (left <= right) {
+        while (arr[left] < pivot) left++;
+        while (arr[right] > pivot) right--;
+        if (left <= right) {
+            swap(arr[left], arr[right]);
+            left++; right--;
+        }
+    }
+
+    std::future<void> fut1, fut2;
+    bool spawn1 = false, spawn2 = false;
+
+    if (running_tasks < max_threads) {
+        running_tasks++;
+        spawn1 = true;
+        fut1 = std::async(std::launch::async, quicksort_parallel, std::ref(arr), begin, right, max_threads);
+    } else {
+        quicksort_parallel(arr, begin, right, max_threads);
+    }
+
+    if (running_tasks < max_threads) {
+        running_tasks++;
+        spawn2 = true;
+        fut2 = std::async(std::launch::async, quicksort_parallel, std::ref(arr), left, end, max_threads);
+    } else {
+        quicksort_parallel(arr, left, end, max_threads);
+    }
+
+    if (spawn1) { fut1.get(); running_tasks--; }
+    if (spawn2) { fut2.get(); running_tasks--; }
+}
+
 // Function to run tests for a specific array size
 void run_tests_for_size(int array_size, const string& difficulty) {
     double baseline_time = 0.0;
@@ -154,8 +197,9 @@ void run_tests_for_size(int array_size, const string& difficulty) {
         vector<int> data = original_data;
         
         // Measure multi-threaded sorting time
+        running_tasks = 0; // Reset before each run
         start = chrono::high_resolution_clock::now();
-        quicksort(data, 0, data.size() - 1);
+        quicksort_parallel(data, 0, data.size() - 1, thread_count);
         end = chrono::high_resolution_clock::now();
         chrono::duration<double, milli> multi_threaded_time = end - start;
         
