@@ -45,13 +45,16 @@ int number_threads(){
     return thread::hardware_concurrency();
 }
 
-void quicksort(vector<int>& arr, int begin, int end, int depth = 0) {
+void quicksort(vector<long>& arr, int begin, int end, int depth = 0) {
     if (begin >= end) return;
 
-    // نختار عنصر في النص كـ pivot
-    int pivot = arr[begin + (end - begin) / 2];
+    // نختار عنصر عشوائي كـ pivot
+    random_device rd;
+    mt19937 gen(rd());
+    uniform_int_distribution<int> distrib(begin, end);
+    int pivotIndex = distrib(gen);
+    long pivot = arr[pivotIndex];
 
-    // نقسم العناصر حول الـ pivot
     int left = begin;
     int right = end;
 
@@ -89,10 +92,16 @@ void quicksort(vector<int>& arr, int begin, int end, int depth = 0) {
 }
 
 // Single-threaded version for baseline comparison
-void quicksort_single_thread(vector<int>& arr, int begin, int end) {
+void quicksort_single_thread(vector<long>& arr, int begin, int end) {
     if (begin >= end) return;
 
-    int pivot = arr[begin + (end - begin) / 2];
+    // نختار عنصر عشوائي كـ pivot
+    random_device rd;
+    mt19937 gen(rd());
+    uniform_int_distribution<int> distrib(begin, end);
+    int pivotIndex = distrib(gen);
+    long pivot = arr[pivotIndex];
+
     int left = begin;
     int right = end;
 
@@ -111,26 +120,32 @@ void quicksort_single_thread(vector<int>& arr, int begin, int end) {
     quicksort_single_thread(arr, left, end);
 }
 
-vector<int> generate_random_array(int size) {
-    vector<int> data(size);
+vector<long> generate_random_array(long size) {
+    vector<long> data(size);
     
     // Use random device as seed for random generator
     random_device rd;
     mt19937 gen(rd());
-    uniform_int_distribution<> distrib(1, size * 10);
+    uniform_int_distribution<long> distrib(1, size * 10);
     
     // Fill array with random values
-    for (int i = 0; i < size; i++) {
+    for (long i = 0; i < size; i++) {
         data[i] = distrib(gen);
     }
     
     return data;
 }
 
-void quicksort_parallel(vector<int>& arr, int begin, int end, int max_threads) {
+void quicksort_parallel(vector<long>& arr, int begin, int end, int max_threads) {
     if (begin >= end) return;
 
-    int pivot = arr[begin + (end - begin) / 2];
+    // نختار عنصر عشوائي كـ pivot
+    random_device rd;
+    mt19937 gen(rd());
+    uniform_int_distribution<int> distrib(begin, end);
+    int pivotIndex = distrib(gen);
+    long pivot = arr[pivotIndex];
+
     int left = begin, right = end;
 
     while (left <= right) {
@@ -145,17 +160,20 @@ void quicksort_parallel(vector<int>& arr, int begin, int end, int max_threads) {
     std::future<void> fut1, fut2;
     bool spawn1 = false, spawn2 = false;
 
-    if (running_tasks < max_threads) {
+    // نعدل شرط إطلاق الخيوط: لازم يكون الجزء كبير وعدد الخيوط أقل من المسموح
+    if ((right - begin) > 10000 && running_tasks < max_threads) {
         running_tasks++;
         spawn1 = true;
+        cout << "Thread created for left part: running_tasks = " << running_tasks.load() << endl;
         fut1 = std::async(std::launch::async, quicksort_parallel, std::ref(arr), begin, right, max_threads);
     } else {
         quicksort_parallel(arr, begin, right, max_threads);
     }
 
-    if (running_tasks < max_threads) {
+    if ((end - left) > 10000 && running_tasks < max_threads) {
         running_tasks++;
         spawn2 = true;
+        cout << "Thread created for right part: running_tasks = " << running_tasks.load() << endl;
         fut2 = std::async(std::launch::async, quicksort_parallel, std::ref(arr), left, end, max_threads);
     } else {
         quicksort_parallel(arr, left, end, max_threads);
@@ -166,7 +184,7 @@ void quicksort_parallel(vector<int>& arr, int begin, int end, int max_threads) {
 }
 
 // Function to run tests for a specific array size
-void run_tests_for_size(int array_size, const string& difficulty) {
+void run_tests_for_size(long array_size, const string& difficulty) {
     double baseline_time = 0.0;
     int max_available_threads = number_threads();
     
@@ -174,10 +192,10 @@ void run_tests_for_size(int array_size, const string& difficulty) {
     cout << "Your system has " << max_available_threads << " hardware threads available." << endl;
     
     // Generate random array once
-    vector<int> original_data = generate_random_array(array_size);
+    vector<long> original_data = generate_random_array(array_size);
     
     // First run with single thread to establish baseline
-    vector<int> baseline_data = original_data;
+    vector<long> baseline_data = original_data;
     auto start = chrono::high_resolution_clock::now();
     quicksort_single_thread(baseline_data, 0, baseline_data.size() - 1);
     auto end = chrono::high_resolution_clock::now();
@@ -194,7 +212,7 @@ void run_tests_for_size(int array_size, const string& difficulty) {
         MAX_THREADS = thread_count;
         
         // Make a copy of the original data for this test
-        vector<int> data = original_data;
+        vector<long> data = original_data;
         
         // Measure multi-threaded sorting time
         running_tasks = 0; // Reset before each run
@@ -220,7 +238,7 @@ int main() {
     // Test with three different array sizes
     run_tests_for_size(100000, "light");    // Light workload
     run_tests_for_size(1000000, "medium");  // Medium workload
-    run_tests_for_size(10000000, "hard");   // Hard workload
+    run_tests_for_size(100000000, "hard");   // Hard workload
     
     return 0;
 }

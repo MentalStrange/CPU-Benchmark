@@ -1,0 +1,8 @@
+{
+    "files.associations": {
+        "*.mod": "go",
+        "future": "cpp",
+        "istream": "cpp",
+        "memory": "cpp"
+    }
+}
