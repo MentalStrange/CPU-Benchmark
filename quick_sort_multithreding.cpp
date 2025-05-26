@@ -8,6 +8,9 @@
 #include "save_data_in_csv.h"
 #include <future>
 #include <atomic>
+#include <queue>
+#include <mutex>
+#include <condition_variable>
 
 using namespace std;
 
@@ -17,6 +20,72 @@ int THREAD_THRESHOLD = 1000;
 
 // Global atomic counter for running tasks
 std::atomic<int> running_tasks(0);
+
+// Thread pool implementation
+class ThreadPool {
+private:
+    vector<thread> workers;
+    queue<function<void()>> tasks;
+    
+    mutex queue_mutex;
+    condition_variable condition;
+    bool stop;
+    
+public:
+    ThreadPool(size_t threads) : stop(false) {
+        for(size_t i = 0; i < threads; ++i)
+            workers.emplace_back([this] {
+                while(true) {
+                    function<void()> task;
+                    
+                    {
+                        unique_lock<mutex> lock(this->queue_mutex);
+                        this->condition.wait(lock, [this] { 
+                            return this->stop || !this->tasks.empty(); 
+                        });
+                        
+                        if(this->stop && this->tasks.empty())
+                            return;
+                            
+                        task = move(this->tasks.front());
+                        this->tasks.pop();
+                    }
+                    
+                    task();
+                }
+            });
+    }
+    
+    template<class F>
+    void enqueue(F&& f) {
+        {
+            unique_lock<mutex> lock(queue_mutex);
+            if(stop) throw runtime_error("enqueue on stopped ThreadPool");
+            tasks.emplace(forward<F>(f));
+        }
+        condition.notify_one();
+    }
+    
+    ~ThreadPool() {
+        {
+            unique_lock<mutex> lock(queue_mutex);
+            stop = true;
+        }
+        
+        condition.notify_all();
+        for(thread &worker: workers)
+            worker.join();
+    }
+    
+    size_t get_thread_count() const {
+        return workers.size();
+    }
+    
+    size_t get_queue_size() {
+        unique_lock<mutex> lock(queue_mutex);
+        return tasks.size();
+    }
+};
 
 // Store baseline time for accurate speedup calculations
 double get_baseline_time() {
@@ -48,7 +117,7 @@ int number_threads(){
 void quicksort(vector<long>& arr, int begin, int end, int depth = 0) {
     if (begin >= end) return;
 
-    // نختار عنصر عشوائي كـ pivot
+    // Select random pivot
     random_device rd;
     mt19937 gen(rd());
     uniform_int_distribution<int> distrib(begin, end);
@@ -69,7 +138,7 @@ void quicksort(vector<long>& arr, int begin, int end, int depth = 0) {
         }
     }
 
-    // نعمل خيوط فرعية لو الحجم كبير وما زال عندنا خيوط متاحة
+    // Create sub-threads if size is large and threads are available
     thread t1, t2;
     bool use_thread1 = (right - begin > THREAD_THRESHOLD) && (depth < MAX_THREADS - 1);
     bool use_thread2 = (end - left > THREAD_THRESHOLD) && (depth < MAX_THREADS - 1);
@@ -86,7 +155,7 @@ void quicksort(vector<long>& arr, int begin, int end, int depth = 0) {
         quicksort(arr, left, end, depth);
     }
 
-    // لو شغّلنا threads نستناهم يخلصوا
+    // Wait for threads if we started any
     if (use_thread1) t1.join();
     if (use_thread2) t2.join();
 }
@@ -95,7 +164,7 @@ void quicksort(vector<long>& arr, int begin, int end, int depth = 0) {
 void quicksort_single_thread(vector<long>& arr, int begin, int end) {
     if (begin >= end) return;
 
-    // نختار عنصر عشوائي كـ pivot
+    // Select random pivot
     random_device rd;
     mt19937 gen(rd());
     uniform_int_distribution<int> distrib(begin, end);
@@ -136,10 +205,14 @@ vector<long> generate_random_array(long size) {
     return data;
 }
 
-void quicksort_parallel(vector<long>& arr, int begin, int end, int max_threads) {
-    if (begin >= end) return;
+// New parallel quicksort implementation using thread pool
+void quicksort_parallel_worker(vector<long>& arr, int begin, int end, ThreadPool& pool, atomic<int>& pending_tasks) {
+    if (begin >= end) {
+        pending_tasks--;
+        return;
+    }
 
-    // نختار عنصر عشوائي كـ pivot
+    // Select random pivot
     random_device rd;
     mt19937 gen(rd());
     uniform_int_distribution<int> distrib(begin, end);
@@ -157,30 +230,45 @@ void quicksort_parallel(vector<long>& arr, int begin, int end, int max_threads) 
         }
     }
 
-    std::future<void> fut1, fut2;
-    bool spawn1 = false, spawn2 = false;
-
-    // نعدل شرط إطلاق الخيوط: لازم يكون الجزء كبير وعدد الخيوط أقل من المسموح
-    if ((right - begin) > 10000 && running_tasks < max_threads) {
-        running_tasks++;
-        spawn1 = true;
-        cout << "Thread created for left part: running_tasks = " << running_tasks.load() << endl;
-        fut1 = std::async(std::launch::async, quicksort_parallel, std::ref(arr), begin, right, max_threads);
+    // Always create tasks for both partitions
+    // Let the thread pool handle scheduling
+    if (right - begin > THREAD_THRESHOLD) {
+        pending_tasks++;
+        pool.enqueue([&arr, begin, right, &pool, &pending_tasks] {
+            quicksort_parallel_worker(arr, begin, right, pool, pending_tasks);
+        });
     } else {
-        quicksort_parallel(arr, begin, right, max_threads);
+        quicksort_single_thread(arr, begin, right);
     }
 
-    if ((end - left) > 10000 && running_tasks < max_threads) {
-        running_tasks++;
-        spawn2 = true;
-        cout << "Thread created for right part: running_tasks = " << running_tasks.load() << endl;
-        fut2 = std::async(std::launch::async, quicksort_parallel, std::ref(arr), left, end, max_threads);
+    if (end - left > THREAD_THRESHOLD) {
+        pending_tasks++;
+        pool.enqueue([&arr, left, end, &pool, &pending_tasks] {
+            quicksort_parallel_worker(arr, left, end, pool, pending_tasks);
+        });
     } else {
-        quicksort_parallel(arr, left, end, max_threads);
+        quicksort_single_thread(arr, left, end);
     }
+    
+    pending_tasks--;
+}
 
-    if (spawn1) { fut1.get(); running_tasks--; }
-    if (spawn2) { fut2.get(); running_tasks--; }
+void quicksort_parallel(vector<long>& arr, int begin, int end, int max_threads) {
+    // Create thread pool with specified number of threads
+    ThreadPool pool(max_threads);
+    
+    // Counter for pending tasks
+    atomic<int> pending_tasks(1);
+    
+    // Start the first task
+    pool.enqueue([&arr, begin, end, &pool, &pending_tasks] {
+        quicksort_parallel_worker(arr, begin, end, pool, pending_tasks);
+    });
+    
+    // Wait for all tasks to complete
+    while (pending_tasks > 0) {
+        this_thread::sleep_for(chrono::milliseconds(1));
+    }
 }
 
 // Function to run tests for a specific array size
@@ -204,22 +292,28 @@ void run_tests_for_size(long array_size, const string& difficulty) {
     save_baseline_time(baseline_time);
     cout << "Baseline single-thread time: " << baseline_time << " ms" << endl;
     
-    // Loop through all possible thread counts
+    // Set thread threshold based on array size and available threads
+    THREAD_THRESHOLD = max(500, static_cast<int>(array_size / (max_available_threads * 8)));
+    cout << "Using thread threshold: " << THREAD_THRESHOLD << " elements" << endl;
+    
+    // Loop through different thread counts
     for (int thread_count = 1; thread_count <= max_available_threads; thread_count++) {
         cout << "\nTesting with " << thread_count << " thread(s)..." << endl;
-        
-        // Set the global max threads value
-        MAX_THREADS = thread_count;
         
         // Make a copy of the original data for this test
         vector<long> data = original_data;
         
         // Measure multi-threaded sorting time
-        running_tasks = 0; // Reset before each run
         start = chrono::high_resolution_clock::now();
         quicksort_parallel(data, 0, data.size() - 1, thread_count);
         end = chrono::high_resolution_clock::now();
         chrono::duration<double, milli> multi_threaded_time = end - start;
+        
+        // Verify that the array is properly sorted
+        bool is_sorted = std::is_sorted(data.begin(), data.end());
+        if (!is_sorted) {
+            cout << "WARNING: Array is not properly sorted!" << endl;
+        }
         
         cout << "Multi-threaded sorting completed in " << multi_threaded_time.count() << " ms" << endl;
         
@@ -236,9 +330,9 @@ void run_tests_for_size(long array_size, const string& difficulty) {
 
 int main() {
     // Test with three different array sizes
-    run_tests_for_size(100000, "light");    // Light workload
-    run_tests_for_size(1000000, "medium");  // Medium workload
-    run_tests_for_size(100000000, "hard");   // Hard workload
+    run_tests_for_size(100000, "light");     // Light workload
+    run_tests_for_size(1000000, "medium");   // Medium workload
+    run_tests_for_size(10000000, "heavy");   // Heavy workload
     
     return 0;
 }
