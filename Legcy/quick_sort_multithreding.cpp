@@ -11,6 +11,7 @@
 #include <queue>
 #include <mutex>
 #include <condition_variable>
+#include "parallel_split_sort.h"
 
 using namespace std;
 
@@ -329,10 +330,19 @@ void run_tests_for_size(long array_size, const string& difficulty) {
 }
 
 int main() {
-    // Test with three different array sizes
-    run_tests_for_size(100000, "light");     // Light workload
-    run_tests_for_size(1000000, "medium");   // Medium workload
-    run_tests_for_size(10000000, "heavy");   // Heavy workload
-    
+    // استخدم كل الخيوط المتاحة في الجهاز
+    int num_threads = std::thread::hardware_concurrency();
+    if (num_threads < 1) num_threads = 2; // احتياطياً لو رجعت 0
+
+    long array_size = 10000000000; // يمكنك تغيير الحجم حسب رغبتك
+    vector<long> arr = generate_random_array(array_size);
+
+    auto start = chrono::high_resolution_clock::now();
+    parallel_initial_split_sort(arr, num_threads);
+    auto end = chrono::high_resolution_clock::now();
+    chrono::duration<double, milli> duration = end - start;
+
+    cout << "Parallel split sort with " << num_threads << " threads took: " << duration.count() << " ms" << endl;
+    cout << "Sorted: " << (is_sorted(arr.begin(), arr.end()) ? "YES" : "NO") << endl;
     return 0;
 }

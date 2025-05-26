@@ -3,6 +3,8 @@
         "*.mod": "go",
         "future": "cpp",
         "istream": "cpp",
-        "memory": "cpp"
+        "memory": "cpp",
+        "vector": "cpp",
+        "condition_variable": "cpp"
     }
 }
