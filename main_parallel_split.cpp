@@ -33,7 +33,7 @@ std::vector<long> generate_random_array(long size) {
 int main() {
     int num_threads = std::thread::hardware_concurrency();
     if (num_threads < 1) num_threads = 2;
-    long array_size = 10000000;
+    long array_size = 1000000000;
     vector<long> arr = generate_random_array(array_size);
 
     auto start = chrono::high_resolution_clock::now();
